@@ -16,6 +16,7 @@ app.use(
   cors({
     origin: [
       "https://cdc.soet-krmu.com",
+      "https://cdc-portal-zv4g.onrender.com",
       "http://localhost:5173",
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
