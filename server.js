@@ -15,7 +15,7 @@ const app = express();
 app.use(
   cors({
     origin: [
-      "cdc.soet-krmu.com",
+      "https://cdc.soet-krmu.com",
       "http://localhost:5173",
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
