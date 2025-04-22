@@ -15,10 +15,7 @@ const app = express();
 app.use(
   cors({
     origin: [
-      "https://campusconnectkrmu.vercel.app",
-      "https://campusconnect-test.onrender.com",
-      "https://campusconnectkrmu.onrender.com",
-      "http://campusconnect-frontend.s3-website.eu-north-1.amazonaws.com",
+      "https://cdc-portal-zv4g.onrender.com",
       "http://localhost:5173",
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
