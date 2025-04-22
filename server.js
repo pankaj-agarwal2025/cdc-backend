@@ -15,7 +15,7 @@ const app = express();
 app.use(
   cors({
     origin: [
-      "https://cdc-portal-zv4g.onrender.com",
+      "cdc.soet-krmu.com",
       "http://localhost:5173",
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
