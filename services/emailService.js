@@ -57,6 +57,8 @@ const sendBulkEmail = async (senderUserId, recipientIds, subject, content, attac
       failed: [],
     };
 
+    const frontendUrl = process.env.FRONTEND_URL || "https://campusconnectkrmu.onrender.com";
+
     for (const recipient of recipients) {
       try {
         const trackingRecord = new EmailTracking({
@@ -70,14 +72,15 @@ const sendBulkEmail = async (senderUserId, recipientIds, subject, content, attac
 
         await trackingRecord.save();
 
-        let emailHtml = content.replace("{{recipient.email}}", recipient.email); // Replace placeholder for unsubscribe link
+        let emailHtml = content.replace("{{recipient.email}}", recipient.email);
+        emailHtml = emailHtml.replace("{{frontendUrl}}", frontendUrl);
         if (options.trackOpens) {
           const trackingPixel = `<img src="${process.env.BACKEND_URL}/api/email/track/${trackingRecord._id}" width="1" height="1" alt="" style="display:none" />`;
           emailHtml += trackingPixel;
         }
 
         const mailOptions = {
-          from: emailFrom, // Use EMAIL_FROM
+          from: emailFrom,
           to: recipient.email,
           subject: subject,
           html: emailHtml,
@@ -157,7 +160,6 @@ const sendBulkEmail = async (senderUserId, recipientIds, subject, content, attac
     throw new Error(`Failed to send bulk email: ${error.message}`);
   }
 };
-
 /**
  * Get user groups for email targeting
  * @returns {Object} - User groups data

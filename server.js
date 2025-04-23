@@ -9,12 +9,14 @@ const profileRoutes = require("./routes/profileRoutes");
 const userRoutes = require("./routes/userRoutes");
 const applicationRoutes = require("./routes/applicationRoutes");
 const trainingRoutes = require("./routes/TrainingRoutes");
-const emailRoutes = require("./routes/emailRoutes"); // Add email routes
+const emailRoutes = require("./routes/emailRoutes");
+
 const app = express();
 
 app.use(
   cors({
     origin: [
+      process.env.FRONTEND_URL || "https://campusconnectkrmu.onrender.com",
       "https://cdc.soet-krmu.com",
       "https://cdc-portal-zv4g.onrender.com",
       "http://localhost:5173",
@@ -28,17 +30,15 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Static paths
-app.use("/api/uploads", express.static(path.join(__dirname, "uploads")));
+app.use("/api/uploads", express.static(path.join(__dirname, "Uploads")));
 
-// Route mounting
 app.use("/api/auth", authRoutes);
 app.use("/api/jobs", jobRoutes);
 app.use("/api/admin", userRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/applications", applicationRoutes);
 app.use("/api/trainings", trainingRoutes);
-app.use("/api/email", emailRoutes); 
+app.use("/api/email", emailRoutes);
 
 connectDb();
 
@@ -46,5 +46,5 @@ app.get("/", (req, res) => {
   res.send("server connected...");
 });
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
