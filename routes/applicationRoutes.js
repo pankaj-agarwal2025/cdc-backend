@@ -23,17 +23,47 @@ const upload = multer({
   },
 });
 
-router.post("/", protect, upload.single("resume"), async (req, res) => {
+// Multer error handling middleware
+const handleMulterError = (err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    console.error("Multer error:", err);
+    return res.status(400).json({ message: `Multer error: ${err.message}` });
+  } else if (err) {
+    console.error("File upload error:", err);
+    return res.status(400).json({ message: err.message });
+  }
+  next();
+};
+
+router.post("/", protect, upload.single("resume"), handleMulterError, async (req, res) => {
   try {
+    console.log("Request body:", req.body);
+    console.log("File:", req.file);
+
     const { jobId, fullName, email, phone } = req.body;
+    if (!jobId || !fullName || !email || !phone || !req.file) {
+      return res.status(400).json({ message: "Missing required fields: jobId, fullName, email, phone, or resume" });
+    }
+
     const job = await Job.findById(jobId);
-    if (!job) return res.status(404).json({ message: "Job not found" });
-    if (job.status !== "approved") return res.status(403).json({ message: "Job not approved yet" });
+    if (!job) {
+      console.error("Job not found:", jobId);
+      return res.status(404).json({ message: "Job not found" });
+    }
+    if (job.status !== "approved") {
+      console.error("Job not approved:", jobId);
+      return res.status(403).json({ message: "Job not approved yet" });
+    }
     if (job.expiryDate && new Date(job.expiryDate) < new Date()) {
+      console.error("Job expired:", jobId);
       return res.status(403).json({ message: "Job application period has expired" });
     }
+
     const existingApplication = await Application.findOne({ userId: req.user._id, jobId });
-    if (existingApplication) return res.status(400).json({ message: "You have already applied for this job" });
+    if (existingApplication) {
+      console.error("Duplicate application:", { userId: req.user._id, jobId });
+      return res.status(400).json({ message: "You have already applied for this job" });
+    }
 
     const resume = `/Uploads/${req.file.filename}`;
     const application = new Application({
@@ -46,13 +76,20 @@ router.post("/", protect, upload.single("resume"), async (req, res) => {
     });
 
     await application.save();
+    console.log("Application saved:", application._id);
     res.status(201).json({ message: "Application submitted successfully! Mazze karo!" });
   } catch (error) {
-    console.error("Error applying for job:", error);
+    console.error("Error applying for job:", {
+      message: error.message,
+      stack: error.stack,
+      body: req.body,
+      file: req.file,
+    });
     res.status(500).json({ message: error.message || "Server error, bhai kuch gadbad ho gaya!" });
   }
 });
 
+// Other routes (unchanged for brevity)
 router.get("/jobs", protect, admin, async (req, res) => {
   try {
     const jobs = await Job.find().lean();

@@ -40,6 +40,20 @@ app.use("/api/applications", applicationRoutes);
 app.use("/api/trainings", trainingRoutes);
 app.use("/api/email", emailRoutes);
 
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error("Unhandled error:", {
+    message: err.message,
+    stack: err.stack,
+    path: req.path,
+    method: req.method,
+  });
+  res.status(500).json({
+    message: "Internal server error",
+    error: process.env.NODE_ENV === "production" ? undefined : err.message,
+  });
+});
+
 connectDb();
 
 app.get("/", (req, res) => {
