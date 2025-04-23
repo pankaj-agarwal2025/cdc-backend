@@ -383,11 +383,11 @@ const sendVerificationEmail = async (user, token) => {
   try {
     const { transporter, getVerificationEmailTemplate } = require('../config/emailConfig');
     
-    // Use BACKEND_URL for the verification link
-    const verificationLink = `${process.env.BACKEND_URL || 'http://localhost:5000'}/api/auth/verify-email?token=${token}`;
+    // Use FRONTEND_URL instead of BACKEND_URL for the verification link
+    const verificationLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email?token=${token}`;
     
     // Log the link for debugging
-    console.log("BACKEND_URL:", process.env.BACKEND_URL);
+    console.log("FRONTEND_URL:", process.env.FRONTEND_URL);
     console.log("Verification Link:", verificationLink);
     
     // Get email template
