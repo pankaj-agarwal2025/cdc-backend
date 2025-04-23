@@ -10,8 +10,16 @@ const userRoutes = require("./routes/userRoutes");
 const applicationRoutes = require("./routes/applicationRoutes");
 const trainingRoutes = require("./routes/TrainingRoutes");
 const emailRoutes = require("./routes/emailRoutes");
+const fs = require("fs");
 
 const app = express();
+
+// Create Uploads directory if it doesn't exist
+const uploadDir = path.join(__dirname, "Uploads");
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+  console.log("Created Uploads directory:", uploadDir);
+}
 
 app.use(
   cors({

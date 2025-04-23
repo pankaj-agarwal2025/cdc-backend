@@ -4,11 +4,20 @@ const { protect, admin } = require("../middleware/authMiddleware");
 const Application = require("../models/Application");
 const Job = require("../models/Job");
 const emailService = require("../services/emailService");
+const path = require("path");
+const fs = require("fs");
 
 const router = express.Router();
 
+// Ensure Uploads directory exists
+const uploadDir = path.join(__dirname, "Uploads");
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+  console.log("Created Uploads directory:", uploadDir);
+}
+
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, "Uploads/"),
+  destination: (req, file, cb) => cb(null, uploadDir),
   filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
 });
 const upload = multer({
@@ -66,6 +75,12 @@ router.post("/", protect, upload.single("resume"), handleMulterError, async (req
     }
 
     const resume = `/Uploads/${req.file.filename}`;
+    // Verify file exists
+    if (!fs.existsSync(path.join(uploadDir, req.file.filename))) {
+      console.error("Uploaded file not found:", req.file.filename);
+      return res.status(500).json({ message: "Failed to save uploaded file" });
+    }
+
     const application = new Application({
       userId: req.user._id,
       jobId,
