@@ -1,28 +1,21 @@
-// services/emailService.js
-const nodemailer = require("nodemailer")
-const User = require("../models/User")
-const EmailTemplate = require("../models/EmailTemplate")
-const EmailTracking = require("../models/EmailTracking")
-const crypto = require("crypto")
+const nodemailer = require("nodemailer");
+const User = require("../models/User");
+const EmailTemplate = require("../models/EmailTemplate");
+const EmailTracking = require("../models/EmailTracking");
+const crypto = require("crypto");
 
-/**
- * Create a transporter for sending emails
- * @returns {Object} - Nodemailer transporter
- */
 const createTransporter = async () => {
-  // Get email configuration from environment variables
-  const emailUser = process.env.EMAIL_USER
-  const emailPass = process.env.EMAIL_APP_PASSWORD // Use app password, not regular password
-  const emailService = process.env.EMAIL_SERVICE || "gmail"
-  const emailName = process.env.EMAIL_DISPLAY_NAME || "Campus Connect"
+  const emailUser = process.env.EMAIL_USER;
+  const emailPass = process.env.EMAIL_APP_PASSWORD;
+  const emailService = process.env.EMAIL_SERVICE || "gmail";
+  const emailFrom = process.env.EMAIL_FROM || `"Campus Connect" <${emailUser}>`;
 
   if (!emailUser || !emailPass) {
     throw new Error(
       "Email credentials not configured. Please set EMAIL_USER and EMAIL_APP_PASSWORD environment variables."
-    )
+    );
   }
 
-  // Create the transporter with proper configuration
   const transporter = nodemailer.createTransport({
     service: emailService,
     auth: {
@@ -30,77 +23,42 @@ const createTransporter = async () => {
       pass: emailPass,
     },
     tls: {
-      rejectUnauthorized: false, // Only use in development
+      rejectUnauthorized: false,
     },
-  })
+  });
 
-  // Verify the connection configuration
   try {
-    await transporter.verify()
-    console.log("SMTP connection verified successfully")
-    return { transporter, emailUser, emailName }
+    await transporter.verify();
+    console.log("SMTP connection verified successfully");
+    return { transporter, emailUser, emailFrom };
   } catch (error) {
-    console.error("SMTP connection verification failed:", error)
-    throw new Error(`Failed to create email transporter: ${error.message}`)
+    console.error("SMTP connection verification failed:", error);
+    throw new Error(`Failed to create email transporter: ${error.message}`);
   }
-}
+};
 
-/**
- * Send bulk emails from the system email address
- * @param {String} senderUserId - ID of the user sending the email (admin/staff)
- * @param {Array} recipientIds - Array of recipient user IDs
- * @param {String} subject - Email subject
- * @param {String} content - HTML content of email
- * @param {Array} attachments - Array of file attachments
- * @param {Object} options - Additional options (tracking, scheduling)
- * @returns {Object} - Results of the email sending operation
- */
 const sendBulkEmail = async (senderUserId, recipientIds, subject, content, attachments = [], options = {}) => {
   try {
-    // Get sender user details (for logging purposes only)
-    const sender = await User.findById(senderUserId)
+    const sender = await User.findById(senderUserId);
     if (!sender) {
-      throw new Error("Sender not found")
+      throw new Error("Sender not found");
     }
 
-    // Create a shared transporter using environment variables
-    const { transporter, emailUser, emailName } = await createTransporter()
-
-    // Get recipient users
-    const recipients = await User.find({ _id: { $in: recipientIds } })
+    const { transporter, emailFrom } = await createTransporter();
+    const recipients = await User.find({ _id: { $in: recipientIds } });
 
     if (!recipients.length) {
-      throw new Error("No valid recipients found")
+      throw new Error("No valid recipients found");
     }
 
-    // Generate a campaign ID for tracking
-    const campaignId = crypto.randomBytes(16).toString("hex")
-
-    // Prepare email data - always sending from the system email
-    const mailOptions = {
-      from: `"${emailName}" <${emailUser}>`,
-      subject: subject,
-      html: content,
-    }
-
-    // Add attachments if any
-    if (attachments && attachments.length > 0) {
-      mailOptions.attachments = attachments.map((file) => ({
-        filename: file.originalname,
-        path: file.path,
-      }))
-    }
-
-    // Results tracking
+    const campaignId = crypto.randomBytes(16).toString("hex");
     const results = {
       successful: [],
       failed: [],
-    }
+    };
 
-    // Process emails
     for (const recipient of recipients) {
       try {
-        // Create tracking record
         const trackingRecord = new EmailTracking({
           campaign: campaignId,
           sender: senderUserId,
@@ -108,79 +66,74 @@ const sendBulkEmail = async (senderUserId, recipientIds, subject, content, attac
           subject: subject,
           status: options.scheduledDateTime ? "scheduled" : "sent",
           scheduledFor: options.scheduledDateTime || null,
-        })
+        });
 
-        await trackingRecord.save()
+        await trackingRecord.save();
 
-        // Add tracking pixel if enabled
-        let emailHtml = content
+        let emailHtml = content.replace("{{recipient.email}}", recipient.email); // Replace placeholder for unsubscribe link
         if (options.trackOpens) {
-          const trackingPixel = `<img src="${process.env.BACKEND_URL || "http://localhost:5000"}/api/email/track/${trackingRecord._id}" width="1" height="1" alt="" style="display:none" />`
-          emailHtml += trackingPixel
+          const trackingPixel = `<img src="${process.env.BACKEND_URL}/api/email/track/${trackingRecord._id}" width="1" height="1" alt="" style="display:none" />`;
+          emailHtml += trackingPixel;
         }
 
-        // Set recipient and tracking-specific content
-        mailOptions.to = recipient.email
-        mailOptions.html = emailHtml
+        const mailOptions = {
+          from: emailFrom, // Use EMAIL_FROM
+          to: recipient.email,
+          subject: subject,
+          html: emailHtml,
+        };
 
-        // Send or schedule email
+        if (attachments && attachments.length > 0) {
+          mailOptions.attachments = attachments.map((file) => ({
+            filename: file.originalname,
+            path: file.path,
+          }));
+        }
+
         if (options.scheduledDateTime && new Date(options.scheduledDateTime) > new Date()) {
-          // In production use a job queue system (Bull, Agenda, etc.)
-          const timeUntilSend = new Date(options.scheduledDateTime) - new Date()
-
+          const timeUntilSend = new Date(options.scheduledDateTime) - new Date();
           setTimeout(async () => {
             try {
-              const info = await transporter.sendMail(mailOptions)
-
-              // Update tracking record
+              const info = await transporter.sendMail(mailOptions);
               await EmailTracking.findByIdAndUpdate(trackingRecord._id, {
                 status: "sent",
                 sent: new Date(),
-              })
+              });
             } catch (err) {
-              console.error(`Scheduled email to ${recipient.email} failed:`, err)
-
-              // Update tracking record with failure
+              console.error(`Scheduled email to ${recipient.email} failed:`, err);
               await EmailTracking.findByIdAndUpdate(trackingRecord._id, {
                 status: "failed",
                 error: err.message,
-              })
+              });
             }
-          }, timeUntilSend)
+          }, timeUntilSend);
 
           results.successful.push({
             email: recipient.email,
             status: "scheduled",
             scheduledFor: options.scheduledDateTime,
             trackingId: trackingRecord._id,
-          })
+          });
         } else {
-          // Send immediately
-          const info = await transporter.sendMail(mailOptions)
-
-          // Update tracking record
+          const info = await transporter.sendMail(mailOptions);
           await EmailTracking.findByIdAndUpdate(trackingRecord._id, {
             status: "delivered",
             sent: new Date(),
-          })
+          });
 
           results.successful.push({
             email: recipient.email,
             messageId: info.messageId,
             status: "sent",
             trackingId: trackingRecord._id,
-          })
+          });
         }
       } catch (error) {
-        console.error(`Failed to send email to ${recipient.email}:`, error)
-
-        // Log failed recipient
+        console.error(`Failed to send email to ${recipient.email}:`, error);
         results.failed.push({
           email: recipient.email,
           error: error.message,
-        })
-
-        // Create failed tracking record
+        });
         await new EmailTracking({
           campaign: campaignId,
           sender: senderUserId,
@@ -188,7 +141,7 @@ const sendBulkEmail = async (senderUserId, recipientIds, subject, content, attac
           subject: subject,
           status: "failed",
           error: error.message,
-        }).save()
+        }).save();
       }
     }
 
@@ -198,12 +151,12 @@ const sendBulkEmail = async (senderUserId, recipientIds, subject, content, attac
       sent: results.successful.length,
       failed: results.failed.length,
       details: results,
-    }
+    };
   } catch (error) {
-    console.error("Error in sendBulkEmail:", error)
-    throw new Error(`Failed to send bulk email: ${error.message}`)
+    console.error("Error in sendBulkEmail:", error);
+    throw new Error(`Failed to send bulk email: ${error.message}`);
   }
-}
+};
 
 /**
  * Get user groups for email targeting

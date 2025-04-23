@@ -1,19 +1,105 @@
 const Job = require("../models/Job");
+const User = require("../models/User");
+const emailService = require("../services/emailService");
 
 exports.createJob = async (req, res) => {
   try {
-    const newJob = new Job(req.body);
+    // Check if user is admin 
+    const isAdminOrStaff = req.user && (req.user.role === "admin" );
+    const jobData = {
+      ...req.body,
+      status: isAdminOrStaff ? "approved" : "pending",
+      postedBy: req.user ? req.user.name : req.body.contactPersonName,
+    };
+
+    const newJob = new Job(jobData);
     const savedJob = await newJob.save();
-    res.status(201).json({ success: true, data: savedJob, message: "Job created successfully, pending admin approval" });
-  } catch (error) {
-    console.error("Error creating job:", error); // Log full error
-    if (error.name === "ValidationError") {
-      const messages = Object.values(error.errors).map(err => err.message);
-      return res.status(400).json({ success: false, message: "Validation failed", errors: messages });
+
+    // If job is approved, send email to all students
+    if (savedJob.status === "approved") {
+      try {
+        // Fetch all active students
+        const students = await User.find({ role: "student", status: "active" }, "_id email");
+        const recipientIds = students.map((student) => student._id);
+
+        if (recipientIds.length > 0) {
+          // Define email content
+          const subject = `New Job Opportunity: ${savedJob.profiles} at ${savedJob.companyName}`;
+          const htmlContent = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+              <h2 style="color: #2c3e50;">New Job Opportunity!</h2>
+              <p style="font-size: 16px; color: #34495e;">A new job has been posted on Campus Connect that might interest you. Here are the details:</p>
+              <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+                <tr>
+                  <td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #e0e0e0;">Company:</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #e0e0e0;">${savedJob.companyName}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #e0e0e0;">Position:</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #e0e0e0;">${savedJob.profiles}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #e0e0e0;">Salary/Stipend:</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #e0e0e0;">${savedJob.ctcOrStipend}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #e0e0e0;">Skills Required:</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #e0e0e0;">${savedJob.skills.join(", ")}</td>
+                </tr>
+              </table>
+              <p style="font-size: 14px; color: #7f8c8d;">To view more details and apply, visit the Campus Connect portal.</p>
+              <a href="${process.env.FRONTEND_URL}/jobs/${savedJob._id}" 
+                 style="display: inline-block; padding: 10px 20px; background-color: #3498db; color: white; text-decoration: none; border-radius: 5px; margin-top: 10px;">
+                View Job
+              </a>
+              <p style="font-size: 12px; color: #bdc3c7; margin-top: 20px;">
+                This email was sent by Campus Connect. 
+                <a href="${process.env.FRONTEND_URL}/unsubscribe?email={{recipient.email}}">Unsubscribe</a>
+              </p>
+            </div>
+          `;
+
+          // Send bulk email
+          const emailResult = await emailService.sendBulkEmail(
+            req.user._id, // Sender ID
+            recipientIds, // Recipient IDs
+            subject,
+            htmlContent,
+            [], // No attachments
+            { trackOpens: true } // Enable open tracking
+          );
+
+        } else {
+          console.log("No active students found to send email notifications.");
+        }
+      } catch (emailError) {
+        console.error("Error sending email notifications to students:", emailError);
+        // Do not fail the job creation if email sending fails
+      }
     }
-    res.status(400).json({ success: false, message: error.message });
+
+    res.status(201).json({
+      success: true,
+      data: savedJob,
+      message: `Job created successfully, status: ${savedJob.status}`,
+    });
+  } catch (error) {
+    console.error("Error creating job:", error);
+    if (error.name === "ValidationError") {
+      const messages = Object.values(error.errors).map((err) => err.message);
+      return res.status(400).json({
+        success: false,
+        message: "Validation failed",
+        errors: messages,
+      });
+    }
+    res.status(400).json({
+      success: false,
+      message: error.message || "Failed to create job",
+    });
   }
 };
+
 
 exports.getPublicJobs = async (req, res) => {
   try {
