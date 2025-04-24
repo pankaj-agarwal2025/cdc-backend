@@ -39,7 +39,7 @@ let gfsBucket;
 const initGridFS = async () => {
   const client = new MongoClient(process.env.MONGO_URI);
   await client.connect();
-  const db = client.db("CampusConnect");
+  const db = client.db("campusconnect"); 
   gfsBucket = new GridFSBucket(db, { bucketName: "resumes" });
   console.log("GridFS initialized");
 };
