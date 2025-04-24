@@ -4,11 +4,14 @@ const emailService = require("../services/emailService");
 
 exports.createJob = async (req, res) => {
   try {
-    // Check if user is admin 
-    const isAdminOrStaff = req.user && (req.user.role === "admin" );
+    // Check if user is admin - for authenticated users
+    const isAdmin= req.user && (req.user.role === "admin");
+    
+    // Create job data with proper status and posted by info
     const jobData = {
       ...req.body,
-      status: isAdminOrStaff ? "approved" : "pending",
+      status: isAdmin? "approved" : "pending",
+      // Use contact person name for unauthenticated users
       postedBy: req.user ? req.user.name : req.body.contactPersonName,
     };
 
@@ -61,7 +64,7 @@ exports.createJob = async (req, res) => {
 
           // Send bulk email
           const emailResult = await emailService.sendBulkEmail(
-            req.user._id, // Sender ID
+            req.user ? req.user._id : null, // Sender ID (can be null for unauthenticated)
             recipientIds, // Recipient IDs
             subject,
             htmlContent,
