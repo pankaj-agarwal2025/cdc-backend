@@ -1,5 +1,8 @@
+// controllers/profileController.js
 const User = require("../models/User");
+const cloudinary = require("cloudinary").v2;
 
+// Get Profile
 exports.getProfile = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -42,11 +45,11 @@ exports.getProfile = async (req, res) => {
       certifications: user.certifications || [],
       skills: user.skills || [],
       experience: experiences,
-      profilePhoto: user.profilePhoto ? user.profilePhoto.replace(/^\/+/, '') : null, // Normalize path
+      profilePhoto: user.profilePhoto || null,
       resume: user.resume || null,
       role: user.role,
       createdAt: user.createdAt,
-      updatedAt: user.updatedAt
+      updatedAt: user.updatedAt,
     };
 
     res.json(mappedUser);
@@ -56,72 +59,92 @@ exports.getProfile = async (req, res) => {
   }
 };
 
-// -----------------------------
 // Helper to process form data
-// -----------------------------
-const processProfileData = (req) => {
+const processProfileData = async (req) => {
   try {
     const updateFields = { ...req.body };
 
+    // Parse JSON fields
     ['education', 'experience', 'certifications', 'skills'].forEach(field => {
       if (updateFields[field]) {
         try {
           updateFields[field] = JSON.parse(updateFields[field]);
-
           if (field === 'experience' && !Array.isArray(updateFields[field])) {
             updateFields[field] = [updateFields[field]];
           }
         } catch (err) {
           console.error(`Error parsing ${field} data:`, err);
+          throw new Error(`Invalid ${field} data format`);
         }
       }
     });
 
+    // Handle boolean fields
     if (updateFields.readyToRelocate) {
-      updateFields.readyToRelocate = updateFields.readyToRelocate === "true";
+      updateFields.readyToRelocate = updateFields.readyToRelocate === "true" || updateFields.readyToRelocate === true;
     }
 
+    // Process experience
     if (Array.isArray(updateFields.experience)) {
       updateFields.experience = updateFields.experience.map(exp => ({
         ...exp,
-        hasExperience: exp.hasExperience === true || exp.hasExperience === "true"
+        hasExperience: exp.hasExperience === true || exp.hasExperience === "true",
       }));
     }
 
-    // 🔧 PROFILE PHOTO HANDLING (updated)
-    if (req.files) {
-      if (req.files.profilePhoto) {
-        updateFields.profilePhoto = `uploads/${req.files.profilePhoto[0].filename}`;
-      }
+    // Handle profile photo upload to Cloudinary
+    if (req.files?.profilePhoto) {
+      const file = req.files.profilePhoto[0];
+      const result = await new Promise((resolve, reject) => {
+        cloudinary.uploader.upload_stream(
+          { resource_type: "image", folder: "campusconnect/profiles" },
+          (error, result) => {
+            if (error) return reject(error);
+            resolve(result);
+          }
+        ).end(file.buffer);
+      });
+      updateFields.profilePhoto = result.secure_url;
     }
 
-    if (!updateFields.profilePhoto && req.body.profilePhoto) {
-      const rawPath = req.body.profilePhoto;
-
-      const cleanedPath = rawPath
-        .replace(/^\/?api\//, "")             // remove /api/ prefix
-        .replace(/^https?:\/\/[^/]+\/?/, "") // remove domain
-        .replace(/^\/+/, "");                // remove leading slashes
-
-      updateFields.profilePhoto = cleanedPath;
-    }
-
+    // Handle resume upload to Cloudinary
     if (req.files?.resume) {
-      updateFields.resume = `uploads/${req.files.resume[0].filename}`;
+      const file = req.files.resume[0];
+      const result = await new Promise((resolve, reject) => {
+        cloudinary.uploader.upload_stream(
+          { resource_type: "raw", folder: "campusconnect/resumes", format: "pdf" },
+          (error, result) => {
+            if (error) return reject(error);
+            resolve(result);
+          }
+        ).end(file.buffer);
+      });
+      updateFields.resume = result.secure_url;
     }
 
+    // Handle certification images upload to Cloudinary
     if (updateFields.certifications && Array.isArray(updateFields.certifications)) {
       const processedCertifications = [];
 
       for (let i = 0; i < updateFields.certifications.length; i++) {
         const cert = {
-          name: updateFields.certifications[i].name,
-          image: updateFields.certifications[i].image || ""
+          name: updateFields.certifications[i].name || "",
+          image: updateFields.certifications[i].image || "",
         };
 
         const certFileKey = `certificationImage-${i}`;
         if (req.files[certFileKey]) {
-          cert.image = `uploads/${req.files[certFileKey][0].filename}`;
+          const file = req.files[certFileKey][0];
+          const result = await new Promise((resolve, reject) => {
+            cloudinary.uploader.upload_stream(
+              { resource_type: "image", folder: "campusconnect/certifications" },
+              (error, result) => {
+                if (error) return reject(error);
+                resolve(result);
+              }
+            ).end(file.buffer);
+          });
+          cert.image = result.secure_url;
         }
 
         processedCertifications.push(cert);
@@ -137,13 +160,11 @@ const processProfileData = (req) => {
   }
 };
 
-// -----------------------------
 // Complete Profile
-// -----------------------------
 exports.completeProfile = async (req, res) => {
   try {
     const userId = req.user._id;
-    const updateFields = processProfileData(req);
+    const updateFields = await processProfileData(req);
 
     if (updateFields.experience?.length === 1 && !updateFields.experience[0].hasExperience) {
       updateFields.experience = [{
@@ -169,7 +190,7 @@ exports.completeProfile = async (req, res) => {
     res.status(200).json({
       success: true,
       message: "Profile completed successfully",
-      user: updatedUser
+      user: updatedUser,
     });
   } catch (error) {
     console.error("Error in completeProfile:", error);
@@ -177,13 +198,11 @@ exports.completeProfile = async (req, res) => {
   }
 };
 
-// -----------------------------
 // Update Profile
-// -----------------------------
 exports.updateProfile = async (req, res) => {
   try {
     const userId = req.user._id;
-    const updateFields = processProfileData(req);
+    const updateFields = await processProfileData(req);
 
     if (updateFields.experience?.length === 1 && !updateFields.experience[0].hasExperience) {
       updateFields.experience = [{
@@ -209,7 +228,7 @@ exports.updateProfile = async (req, res) => {
     res.status(200).json({
       success: true,
       message: "Profile updated successfully",
-      user: updatedUser
+      user: updatedUser,
     });
   } catch (error) {
     console.error("Error updating profile:", error);
@@ -217,15 +236,31 @@ exports.updateProfile = async (req, res) => {
   }
 };
 
-// -----------------------------
 // Upload Profile Photo
-// -----------------------------
+// In profileController.js
 exports.uploadProfilePhoto = async (req, res) => {
   try {
     const userId = req.user._id;
-    const profilePhoto = `uploads/${req.file.filename}`;
+    const file = req.file;
 
-    const user = await User.findByIdAndUpdate(
+    const user = await User.findById(userId);
+    if (user.profilePhoto) {
+      await deleteCloudinaryFile(user.profilePhoto);
+    }
+
+    const result = await new Promise((resolve, reject) => {
+      cloudinary.uploader.upload_stream(
+        { resource_type: "image", folder: "campusconnect/profiles" },
+        (error, result) => {
+          if (error) return reject(error);
+          resolve(result);
+        }
+      ).end(file.buffer);
+    });
+
+    const profilePhoto = result.secure_url;
+
+    const updatedUser = await User.findByIdAndUpdate(
       userId,
       { profilePhoto },
       { new: true }
@@ -234,19 +269,33 @@ exports.uploadProfilePhoto = async (req, res) => {
     res.status(200).json({ message: "Profile photo uploaded", profilePhoto });
   } catch (error) {
     console.error("Error uploading profile photo:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
-// -----------------------------
-// Upload Resume
-// -----------------------------
 exports.uploadResume = async (req, res) => {
   try {
     const userId = req.user._id;
-    const resume = `uploads/${req.file.filename}`;
+    const file = req.file;
 
-    const user = await User.findByIdAndUpdate(
+    const user = await User.findById(userId);
+    if (user.resume) {
+      await deleteCloudinaryFile(user.resume);
+    }
+
+    const result = await new Promise((resolve, reject) => {
+      cloudinary.uploader.upload_stream(
+        { resource_type: "raw", folder: "campusconnect/resumes", format: "pdf" },
+        (error, result) => {
+          if (error) return reject(error);
+          resolve(result);
+        }
+      ).end(file.buffer);
+    });
+
+    const resume = result.secure_url;
+
+    const updatedUser = await User.findByIdAndUpdate(
       userId,
       { resume },
       { new: true }
@@ -255,6 +304,6 @@ exports.uploadResume = async (req, res) => {
     res.status(200).json({ message: "Resume uploaded", resume });
   } catch (error) {
     console.error("Error uploading resume:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };

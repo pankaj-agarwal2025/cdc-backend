@@ -4,24 +4,14 @@ const { protect, admin } = require("../middleware/authMiddleware");
 const Application = require("../models/Application");
 const Job = require("../models/Job");
 const emailService = require("../services/emailService");
-const path = require("path");
-const fs = require("fs");
+const { MongoClient, GridFSBucket } = require("mongodb");
+const { Readable } = require("stream");
 
 const router = express.Router();
 
-// Ensure Uploads directory exists
-const uploadDir = path.join(__dirname, "Uploads");
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-  console.log("Created Uploads directory:", uploadDir);
-}
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadDir),
-  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
-});
+// Configure multer to store files in memory
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   fileFilter: (req, file, cb) => {
     const allowedTypes = ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
     if (allowedTypes.includes(file.mimetype)) {
@@ -43,6 +33,17 @@ const handleMulterError = (err, req, res, next) => {
   }
   next();
 };
+
+// Initialize MongoDB connection and GridFS
+let gfsBucket;
+const initGridFS = async () => {
+  const client = new MongoClient(process.env.MONGO_URI);
+  await client.connect();
+  const db = client.db("CampusConnect");
+  gfsBucket = new GridFSBucket(db, { bucketName: "resumes" });
+  console.log("GridFS initialized");
+};
+initGridFS().catch((err) => console.error("GridFS initialization failed:", err));
 
 router.post("/", protect, upload.single("resume"), handleMulterError, async (req, res) => {
   try {
@@ -74,12 +75,24 @@ router.post("/", protect, upload.single("resume"), handleMulterError, async (req
       return res.status(400).json({ message: "You have already applied for this job" });
     }
 
-    const resume = `/Uploads/${req.file.filename}`;
-    // Verify file exists
-    if (!fs.existsSync(path.join(uploadDir, req.file.filename))) {
-      console.error("Uploaded file not found:", req.file.filename);
-      return res.status(500).json({ message: "Failed to save uploaded file" });
-    }
+    // Upload resume to GridFS
+    const filename = `${Date.now()}-${req.file.originalname}`;
+    const readableStream = Readable.from(req.file.buffer);
+    const uploadStream = gfsBucket.openUploadStream(filename, {
+      contentType: req.file.mimetype,
+    });
+
+    await new Promise((resolve, reject) => {
+      readableStream.pipe(uploadStream)
+        .on("error", (error) => {
+          console.error("GridFS upload error:", error);
+          reject(error);
+        })
+        .on("finish", () => {
+          console.log("File uploaded to GridFS:", filename);
+          resolve();
+        });
+    });
 
     const application = new Application({
       userId: req.user._id,
@@ -87,7 +100,7 @@ router.post("/", protect, upload.single("resume"), handleMulterError, async (req
       fullName,
       email,
       phone,
-      resume,
+      resume: filename, // Store GridFS filename
     });
 
     await application.save();
@@ -101,6 +114,29 @@ router.post("/", protect, upload.single("resume"), handleMulterError, async (req
       file: req.file,
     });
     res.status(500).json({ message: error.message || "Server error, bhai kuch gadbad ho gaya!" });
+  }
+});
+
+// Route to download resume
+router.get("/resume/:filename", async (req, res) => {
+  try {
+    if (!gfsBucket) {
+      throw new Error("GridFS not initialized");
+    }
+
+    const filename = req.params.filename;
+    const downloadStream = gfsBucket.openDownloadStreamByName(filename);
+
+    downloadStream.on("error", (error) => {
+      console.error("Error downloading file:", error);
+      res.status(404).json({ message: "File not found" });
+    });
+
+    res.set("Content-Type", "application/pdf"); // Adjust based on file type
+    downloadStream.pipe(res);
+  } catch (error) {
+    console.error("Error retrieving resume:", error);
+    res.status(500).json({ message: error.message || "Server error" });
   }
 });
 
@@ -146,11 +182,18 @@ router.put("/applications/:id", protect, admin, async (req, res) => {
       application.status = status;
       const updatedApplication = await application.save();
 
-      if (application.userId.receiveEmails) {
+      // Check if user exists and if they want to receive emails
+      if (application.userId && application.userId.receiveEmails) {
         try {
           const recipientId = application.userId._id;
           const frontendUrl = process.env.FRONTEND_URL || "https://campusconnectkrmu.onrender.com";
-          const subject = `Application Status Update: ${application.jobId.profiles} at ${application.jobId.companyName}`;
+          
+          // Add null checks for job information
+          const jobTitle = application.jobId?.profiles || "this position";
+          const companyName = application.jobId?.companyName || "the company";
+          
+          const subject = `Application Status Update: ${jobTitle} at ${companyName}`;
+          
           const htmlContent = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
               <h2 style="color: #2c3e50;">Application Status Update</h2>
@@ -159,11 +202,11 @@ router.put("/applications/:id", protect, admin, async (req, res) => {
               <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
                 <tr>
                   <td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #e0e0e0;">Company:</td>
-                  <td style="padding: 8px; border-bottom: 1px solid #e0e0e0;">${application.jobId.companyName}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #e0e0e0;">${companyName}</td>
                 </tr>
                 <tr>
                   <td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #e0e0e0;">Position:</td>
-                  <td style="padding: 8px; border-bottom: 1px solid #e0e0e0;">${application.jobId.profiles}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #e0e0e0;">${jobTitle}</td>
                 </tr>
                 <tr>
                   <td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #e0e0e0;">New Status:</td>
@@ -186,10 +229,15 @@ router.put("/applications/:id", protect, admin, async (req, res) => {
               </a>
               <p style="font-size: 12px; color: #bdc3c7; margin-top: 20px;">
                 This email was sent by Campus Connect. 
-                <a href="${frontendUrl}/unsubscribe?email={{recipient.email}}">Unsubscribe</a>
+                <a href="${frontendUrl}/unsubscribe?email=${encodeURIComponent(application.userId.email)}">Unsubscribe</a>
               </p>
             </div>
           `;
+
+          // Check if emailService is properly initialized before using it
+          if (!emailService || typeof emailService.sendBulkEmail !== 'function') {
+            throw new Error("Email service not properly initialized");
+          }
 
           const emailResult = await emailService.sendBulkEmail(
             req.user._id,
@@ -200,10 +248,13 @@ router.put("/applications/:id", protect, admin, async (req, res) => {
             { trackOpens: true }
           );
 
-          console.log(`Email sent to student ${application.userId.email} for application ${application._id} status update to ${status}. Campaign ID: ${emailResult.campaignId}`);
+          console.log(`Email sent to student ${application.userId.email} for application ${application._id} status update to ${status}. Campaign ID: ${emailResult?.campaignId || 'unknown'}`);
         } catch (emailError) {
           console.error("Error sending status update email:", emailError);
+          // Send response even if email fails
         }
+      } else {
+        console.log(`Email not sent for application ${application._id}: User preference set to not receive emails or user not found`);
       }
 
       res.json(updatedApplication);
@@ -230,8 +281,33 @@ router.delete("/applications/:id", protect, admin, async (req, res) => {
 router.get("/my-applications", protect, async (req, res) => {
   try {
     const applications = await Application.find({ userId: req.user._id })
-      .populate("jobId", "profiles companyName ctcOrStipend location offerType");
-    res.json(applications);
+      .populate({
+        path: "jobId",
+        select: "profiles companyName ctcOrStipend location offerType"
+      });
+      
+    // Filter out applications with null jobId or add a placeholder
+    const processedApplications = applications.map(app => {
+      if (!app.jobId) {
+        // Option 1: Create a placeholder for deleted jobs
+        return {
+          ...app.toObject(),
+          jobId: {
+            profiles: "Position Removed",
+            companyName: "Company Removed",
+            ctcOrStipend: "N/A",
+            location: "N/A",
+            offerType: []
+          }
+        };
+        
+        // Option 2: Or just return as is (and handle in frontend)
+        // return app;
+      }
+      return app;
+    });
+    
+    res.json(processedApplications);
   } catch (error) {
     console.error("Error fetching applications:", error);
     res.status(500).json({ message: "Server error" });

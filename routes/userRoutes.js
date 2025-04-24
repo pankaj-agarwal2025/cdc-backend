@@ -4,22 +4,24 @@ const User = require("../models/User");
 const { protect, admin } = require("../middleware/authMiddleware");
 const router = express.Router();
 
-// Configure Multer for File Uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "uploads/"); // Save files in "uploads" directory
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + "-" + file.originalname);
-  },
-});
+const storage = multer.memoryStorage();
 
+const fileFilter = (req, file, cb) => {
+  const allowedTypes = ["application/pdf", "image/jpeg", "image/png"];
+  if (allowedTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error("Invalid file type. Only PDF, JPG, and PNG are allowed."), false);
+  }
+};
+
+const upload = multer({ storage, fileFilter });
 // Configure Multer to handle multiple file types
-const upload = multer({ storage });
+
 
 const fileFields = [
   { name: "profilePhoto", maxCount: 1 },
-  { name: "resume", maxCount: 1 }
+  { name: "resume", maxCount: 1 },
 ];
 
 for (let i = 0; i < 10; i++) {

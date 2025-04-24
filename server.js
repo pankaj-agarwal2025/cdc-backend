@@ -1,6 +1,6 @@
+// server.js
 require("dotenv").config();
 const express = require("express");
-const path = require("path");
 const cors = require("cors");
 const connectDb = require("./config/db");
 const authRoutes = require("./routes/authRoutes");
@@ -10,16 +10,9 @@ const userRoutes = require("./routes/userRoutes");
 const applicationRoutes = require("./routes/applicationRoutes");
 const trainingRoutes = require("./routes/TrainingRoutes");
 const emailRoutes = require("./routes/emailRoutes");
-const fs = require("fs");
+const cloudinary = require("cloudinary").v2;
 
 const app = express();
-
-// Create Uploads directory if it doesn't exist
-const uploadDir = path.join(__dirname, "Uploads");
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-  console.log("Created Uploads directory:", uploadDir);
-}
 
 app.use(
   cors({
@@ -35,10 +28,13 @@ app.use(
   })
 );
 
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-app.use("/api/uploads", express.static(path.join(__dirname, "Uploads")));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/jobs", jobRoutes);

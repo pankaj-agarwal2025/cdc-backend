@@ -37,6 +37,7 @@ const UserSchema = new mongoose.Schema(
     ],
     resume: { type: String },
     profilePhoto: { type: String },
+    receiveEmails: { type: Boolean, default: true }, 
   },
   { timestamps: true }
 );
