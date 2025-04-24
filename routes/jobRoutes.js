@@ -19,12 +19,13 @@ const router = express.Router();
 
 // Public Routes
 router.get("/", getPublicJobs);
+router.post("/public", createJob);
 
 // Admin Routes
 router.get("/stats", protect, admin, getJobStats);
 router.get("/stats/applications", protect, admin, getApplicationStats);
 router.get("/admin/jobs", protect, admin, getAllJobsAdmin);
-router.post("/", protect, admin, createJob); 
+router.post("/",protect,admin,createJob); 
 router.put("/:id", protect, admin, updateJob);
 router.delete("/:id", protect, admin, deleteJob);
 router.patch("/:id/status", protect, admin, updateJobStatus);
