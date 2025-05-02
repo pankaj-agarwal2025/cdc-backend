@@ -110,7 +110,6 @@ router.post(
       });
 
       await application.save();
-      console.log("Application saved:", application._id);
       res.status(201).json({ message: "Application submitted successfully!" });
     } catch (error) {
       console.error("Error applying for job:", {
@@ -150,7 +149,6 @@ router.get("/applications/:jobId", protect, admin, async (req, res) => {
     const applications = await Application.find({ jobId: req.params.jobId })
       .populate("userId", "fullName email phone rollNo receiveEmails")
       .populate("jobId", "profiles companyName ctcOrStipend location offerType");
-    console.log("Fetched applications:", applications); // Debug log
     res.json(applications);
   } catch (error) {
     console.error("Error fetching job applications:", error);
@@ -235,11 +233,7 @@ router.put("/applications/:id", protect, admin, async (req, res) => {
             { trackOpens: true }
           );
 
-          console.log(
-            `Email sent to student ${application.userId.email} for application ${
-              application._id
-            } status update to ${status}. Campaign ID: ${emailResult?.campaignId || "unknown"}`
-          );
+          
         } catch (emailError) {
           console.error("Error sending status update email:", emailError);
         }
@@ -274,7 +268,6 @@ router.get("/resume/:applicationId", protect, async (req, res) => {
     }
 
     const resumeUrl = application.resume.replace(/\/upload\//, "/upload/fl_attachment/");
-    console.log(`Fetching resume from Cloudinary: ${resumeUrl}`);
 
     const response = await axios.get(resumeUrl, { responseType: "stream" });
     const contentType = response.headers["content-type"] || "application/pdf";
@@ -371,7 +364,6 @@ router.get("/export/:jobId", protect, admin, async (req, res) => {
       return res.status(400).json({ message: "No applications to export" });
     }
 
-    console.log("Applications for server export:", applications); // Debug log
 
     const tableData = applications.map(app => ({
       Name: app.userId?.fullName || app.fullName || "N/A",
