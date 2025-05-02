@@ -295,6 +295,36 @@ router.get("/resume/:applicationId", protect, async (req, res) => {
   }
 });
 
+// Check resume URL validity
+router.get("/resume/check/:applicationId", protect, admin, async (req, res) => {
+  try {
+    const application = await Application.findById(req.params.applicationId);
+    if (!application) {
+      console.error(`Application not found: ${req.params.applicationId}`);
+      return res.status(404).json({ message: "Application not found" });
+    }
+
+    if (!application.resume) {
+      console.error(`No resume found for application: ${req.params.applicationId}`);
+      return res.json({ isValid: false });
+    }
+
+    // Validate Cloudinary URL by making a HEAD request
+    try {
+      const response = await axios.head(application.resume);
+      const contentType = response.headers["content-type"] || "";
+      const isValid = contentType.includes("pdf") && response.status === 200;
+      res.json({ isValid });
+    } catch (urlError) {
+      console.error(`Error checking resume URL for ${req.params.applicationId}:`, urlError.message);
+      res.json({ isValid: false });
+    }
+  } catch (error) {
+    console.error(`Error in resume URL check for application ${req.params.applicationId}:`, error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 // Delete application
 router.delete("/applications/:id", protect, admin, async (req, res) => {
   try {
