@@ -216,9 +216,86 @@ exports.deleteJob = async (req, res) => {
   }
 };
 
+exports.notifyStudents = async (req, res) => {
+  try {
+    if (!req.user || req.user.role !== "admin") {
+      return res.status(403).json({ success: false, message: "Access denied. Admin privileges required." });
+    }
+
+    const job = await Job.findById(req.params.id);
+    if (!job) {
+      return res.status(404).json({ success: false, message: "Job not found" });
+    }
+    if (job.status !== "approved") {
+      return res.status(400).json({ success: false, message: "Job is not approved" });
+    }
+
+    // Fetch all active students
+    const students = await User.find({ role: "student", status: "active" }, "_id email");
+    const recipientIds = students.map((student) => student._id);
+
+    if (recipientIds.length === 0) {
+      console.log("No active students found to send email notifications.");
+      return res.status(200).json({ success: true, message: "No students to notify" });
+    }
+
+    // Define email content (same as createJob)
+    const subject = `New Job Opportunity: ${job.profiles} at ${job.companyName}`;
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+        <h2 style="color: #2c3e50;">New Job Opportunity!</h2>
+        <p style="font-size: 16px; color: #34495e;">A new job has been posted on Campus Connect that might interest you. Here are the details:</p>
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+          <tr>
+            <td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #e0e0e0;">Company:</td>
+            <td style="padding: 8px; border-bottom: 1px solid #e0e0e0;">${job.companyName}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #e0e0e0;">Position:</td>
+            <td style="padding: 8px; border-bottom: 1px solid #e0e0e0;">${job.profiles}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #e0e0e0;">Salary/Stipend:</td>
+            <td style="padding: 8px; border-bottom: 1px solid #e0e0e0;">${job.ctcOrStipend}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #e0e0e0;">Skills Required:</td>
+            <td style="padding: 8px; border-bottom: 1px solid #e0e0e0;">${job.skills.join(", ")}</td>
+          </tr>
+        </table>
+        <p style="font-size: 14px; color: #7f8c8d;">To view more details and apply, visit the Campus Connect portal.</p>
+        <a href="${process.env.FRONTEND_URL}/jobs/${job._id}" 
+           style="display: inline-block; padding: 10px 20px; background-color: #3498db; color: white; text-decoration: none; border-radius: 5px; margin-top: 10px;">
+          View Job
+        </a>
+        <p style="font-size: 12px; color: #bdc3c7; margin-top: 20px;">
+          This email was sent by Campus Connect. 
+          <a href="${process.env.FRONTEND_URL}/unsubscribe?email={{recipient.email}}">Unsubscribe</a>
+        </p>
+      </div>
+    `;
+
+    // Send bulk email
+    await emailService.sendBulkEmail(
+      req.user._id, // Sender ID
+      recipientIds, // Recipient IDs
+      subject,
+      htmlContent,
+      [], // No attachments
+      { trackOpens: true } // Enable open tracking
+    );
+
+    res.status(200).json({ success: true, message: "Notifications sent successfully" });
+  } catch (error) {
+    console.error("Error sending job notifications:", error);
+    res.status(500).json({ success: false, message: "Failed to send notifications", error: error.message });
+  }
+};
+
+// Update job status and send notifications if approved
 exports.updateJobStatus = async (req, res) => {
   try {
-    if (!req.user || !req.user.isAdmin) {
+    if (!req.user || req.user.role !== "admin") {
       return res.status(403).json({ success: false, message: "Access denied. Admin privileges required." });
     }
     const { status } = req.body;
@@ -226,11 +303,77 @@ exports.updateJobStatus = async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid status" });
     }
     const job = await Job.findById(req.params.id);
-    if (!job) return res.status(404).json({ success: false, message: "Job not found" });
+    if (!job) {
+      return res.status(404).json({ success: false, message: "Job not found" });
+    }
     job.status = status;
     await job.save();
+
+    // If status is approved, send notifications to students
+    if (status === "approved") {
+      try {
+        // Fetch all active students
+        const students = await User.find({ role: "student", status: "active" }, "_id email");
+        const recipientIds = students.map((student) => student._id);
+
+        if (recipientIds.length > 0) {
+          // Define email content (same as createJob)
+          const subject = `New Job Opportunity: ${job.profiles} at ${job.companyName}`;
+          const htmlContent = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+              <h2 style="color: #2c3e50;">New Job Opportunity!</h2>
+              <p style="font-size: 16px; color: #34495e;">A new job has been posted on Campus Connect that might interest you. Here are the details:</p>
+              <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+                <tr>
+                  <td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #e0e0e0;">Company:</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #e0e0e0;">${job.companyName}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #e0e0e0;">Position:</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #e0e0e0;">${job.profiles}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #e0e0e0;">Salary/Stipend:</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #e0e0e0;">${job.ctcOrStipend}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #e0e0e0;">Skills Required:</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #e0e0e0;">${job.skills.join(", ")}</td>
+                </tr>
+              </table>
+              <p style="font-size: 14px; color: #7f8c8d;">To view more details and apply, visit the Campus Connect portal.</p>
+              <a href="${process.env.FRONTEND_URL}/jobs/${job._id}" 
+                 style="display: inline-block; padding: 10px 20px; background-color: #3498db; color: white; text-decoration: none; border-radius: 5px; margin-top: 10px;">
+                View Job
+              </a>
+              <p style="font-size: 12px; color: #bdc3c7; margin-top: 20px;">
+                This email was sent by Campus Connect. 
+                <a href="${process.env.FRONTEND_URL}/unsubscribe?email={{recipient.email}}">Unsubscribe</a>
+              </p>
+            </div>
+          `;
+
+          // Send bulk email
+          await emailService.sendBulkEmail(
+            req.user._id, // Sender ID
+            recipientIds, // Recipient IDs
+            subject,
+            htmlContent,
+            [], // No attachments
+            { trackOpens: true } // Enable open tracking
+          );
+        } else {
+          console.log("No active students found to send email notifications.");
+        }
+      } catch (emailError) {
+        console.error("Error sending email notifications to students:", emailError);
+        // Do not fail the status update if email sending fails
+      }
+    }
+
     res.status(200).json({ success: true, data: job, message: `Job status updated to ${status}` });
   } catch (error) {
+    console.error("Error updating job status:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
