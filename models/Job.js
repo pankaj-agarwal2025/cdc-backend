@@ -21,7 +21,7 @@ const JobSchema = new mongoose.Schema(
     location: { type: String, required: true },
     resultDeclaration: {
       type: String,
-      enum: ["Same day", "Within a week","within a month", "after a month"],
+      enum: ["Same day", "Within a week","Within a month", "After a month"],
       required: true,
     },
     dateOfJoining: { type: Date, required: true },

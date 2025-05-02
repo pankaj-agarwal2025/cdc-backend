@@ -50,9 +50,10 @@ router.post(
     try {
       const { jobId, fullName, email, phone } = req.body;
       if (!jobId || !fullName || !email || !phone || !req.file) {
-        return res
-          .status(400)
-          .json({ message: "Missing required fields: jobId, fullName, email, phone, or resume" });
+        return res.status(400).json({
+          message:
+            "Missing required fields: jobId, fullName, email, phone, or resume",
+        });
       }
 
       const job = await Job.findById(jobId);
@@ -66,7 +67,9 @@ router.post(
       }
       if (job.expiryDate && new Date(job.expiryDate) < new Date()) {
         console.error("Job expired:", jobId);
-        return res.status(403).json({ message: "Job application period has expired" });
+        return res
+          .status(403)
+          .json({ message: "Job application period has expired" });
       }
 
       const existingApplication = await Application.findOne({
@@ -74,7 +77,10 @@ router.post(
         jobId,
       });
       if (existingApplication) {
-        console.error("Duplicate application:", { userId: req.user._id, jobId });
+        console.error("Duplicate application:", {
+          userId: req.user._id,
+          jobId,
+        });
         return res
           .status(400)
           .json({ message: "You have already applied for this job" });
@@ -148,7 +154,10 @@ router.get("/applications/:jobId", protect, admin, async (req, res) => {
   try {
     const applications = await Application.find({ jobId: req.params.jobId })
       .populate("userId", "fullName email phone rollNo receiveEmails")
-      .populate("jobId", "profiles companyName ctcOrStipend location offerType");
+      .populate(
+        "jobId",
+        "profiles companyName ctcOrStipend location offerType"
+      );
     res.json(applications);
   } catch (error) {
     console.error("Error fetching job applications:", error);
@@ -162,9 +171,13 @@ router.put("/applications/:id", protect, admin, async (req, res) => {
     const { status } = req.body;
     const application = await Application.findById(req.params.id)
       .populate("userId", "fullName email rollNo phone receiveEmails")
-      .populate("jobId", "profiles companyName ctcOrStipend location offerType");
+      .populate(
+        "jobId",
+        "profiles companyName ctcOrStipend location offerType"
+      );
 
-    if (!application) return res.status(404).json({ message: "Application not found" });
+    if (!application)
+      return res.status(404).json({ message: "Application not found" });
 
     if (application.status !== status) {
       application.status = status;
@@ -173,14 +186,18 @@ router.put("/applications/:id", protect, admin, async (req, res) => {
       if (application.userId && application.userId.receiveEmails) {
         try {
           const recipientId = application.userId._id;
-          const frontendUrl = process.env.FRONTEND_URL || "https://campusconnectkrmu.onrender.com";
+          const frontendUrl =
+            process.env.FRONTEND_URL ||
+            "https://campusconnectkrmu.onrender.com";
           const jobTitle = application.jobId?.profiles || "this position";
           const companyName = application.jobId?.companyName || "the company";
           const subject = `Application Status Update: ${jobTitle} at ${companyName}`;
           const htmlContent = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
               <h2 style="color: #2c3e50;">Application Status Update</h2>
-              <p style="font-size: 16px; color: #34495e;">Dear ${application.userId.fullName},</p>
+              <p style="font-size: 16px; color: #34495e;">Dear ${
+                application.userId.fullName
+              },</p>
               <p style="font-size: 16px; color: #34495e;">Your application for the following job has been updated:</p>
               <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
                 <tr>
@@ -197,10 +214,14 @@ router.put("/applications/:id", protect, admin, async (req, res) => {
                 </tr>
                 <tr>
                   <td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #e0e0e0;">Applied Date:</td>
-                  <td style="padding: 8px; border-bottom: 1px solid #e0e0e0;">${new Date(
-                    application.appliedDate
-                  ).toLocaleDateString()}</td>
-                </tr>
+<td style="padding: 8px; border-bottom: 1px solid #e0e0e0;">
+  ${new Date(application.appliedDate).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  })}
+</td>
+
               </table>
               <p style="font-size: 14px; color: #7f8c8d;">${
                 status === "Scheduled"
@@ -218,8 +239,8 @@ router.put("/applications/:id", protect, admin, async (req, res) => {
               <p style="font-size: 12px; color: #bdc3c7; margin-top: 20px;">
                 This email was sent by Campus Connect. 
                 <a href="${frontendUrl}/unsubscribe?email=${encodeURIComponent(
-                  application.userId.email
-                )}">Unsubscribe</a>
+            application.userId.email
+          )}">Unsubscribe</a>
               </p>
             </div>
           `;
@@ -232,8 +253,6 @@ router.put("/applications/:id", protect, admin, async (req, res) => {
             [],
             { trackOpens: true }
           );
-
-          
         } catch (emailError) {
           console.error("Error sending status update email:", emailError);
         }
@@ -251,28 +270,42 @@ router.put("/applications/:id", protect, admin, async (req, res) => {
 // Download resume
 router.get("/resume/:applicationId", protect, async (req, res) => {
   try {
-    const application = await Application.findById(req.params.applicationId).populate("userId", "fullName email");
+    const application = await Application.findById(
+      req.params.applicationId
+    ).populate("userId", "fullName email");
     if (!application) {
       console.error(`Application not found: ${req.params.applicationId}`);
       return res.status(404).json({ message: "Application not found" });
     }
 
-    if (application.userId?.toString() !== req.user._id.toString() && req.user.role !== "admin") {
-      console.error(`Unauthorized access to application: ${req.params.applicationId} by user: ${req.user._id}`);
+    if (
+      application.userId?.toString() !== req.user._id.toString() &&
+      req.user.role !== "admin"
+    ) {
+      console.error(
+        `Unauthorized access to application: ${req.params.applicationId} by user: ${req.user._id}`
+      );
       return res.status(403).json({ message: "Not authorized" });
     }
 
     if (!application.resume) {
-      console.error(`No resume found for application: ${req.params.applicationId}`);
+      console.error(
+        `No resume found for application: ${req.params.applicationId}`
+      );
       return res.status(404).json({ message: "No resume found" });
     }
 
-    const resumeUrl = application.resume.replace(/\/upload\//, "/upload/fl_attachment/");
+    const resumeUrl = application.resume.replace(
+      /\/upload\//,
+      "/upload/fl_attachment/"
+    );
 
     const response = await axios.get(resumeUrl, { responseType: "stream" });
     const contentType = response.headers["content-type"] || "application/pdf";
     if (!contentType.includes("pdf")) {
-      console.error(`Invalid content type for resume: ${contentType}, URL: ${resumeUrl}`);
+      console.error(
+        `Invalid content type for resume: ${contentType}, URL: ${resumeUrl}`
+      );
       return res.status(400).json({ message: "Invalid resume file type" });
     }
 
@@ -283,14 +316,19 @@ router.get("/resume/:applicationId", protect, async (req, res) => {
 
     response.data.pipe(res);
   } catch (error) {
-    console.error(`Error downloading resume for application ${req.params.applicationId}:`, {
-      message: error.message,
-      stack: error.stack,
-      response: error.response ? {
-        status: error.response.status,
-        data: error.response.data,
-      } : null,
-    });
+    console.error(
+      `Error downloading resume for application ${req.params.applicationId}:`,
+      {
+        message: error.message,
+        stack: error.stack,
+        response: error.response
+          ? {
+              status: error.response.status,
+              data: error.response.data,
+            }
+          : null,
+      }
+    );
     res.status(500).json({ message: `Server error: ${error.message}` });
   }
 });
@@ -305,7 +343,9 @@ router.get("/resume/check/:applicationId", protect, admin, async (req, res) => {
     }
 
     if (!application.resume) {
-      console.error(`No resume found for application: ${req.params.applicationId}`);
+      console.error(
+        `No resume found for application: ${req.params.applicationId}`
+      );
       return res.json({ isValid: false });
     }
 
@@ -316,11 +356,17 @@ router.get("/resume/check/:applicationId", protect, admin, async (req, res) => {
       const isValid = contentType.includes("pdf") && response.status === 200;
       res.json({ isValid });
     } catch (urlError) {
-      console.error(`Error checking resume URL for ${req.params.applicationId}:`, urlError.message);
+      console.error(
+        `Error checking resume URL for ${req.params.applicationId}:`,
+        urlError.message
+      );
       res.json({ isValid: false });
     }
   } catch (error) {
-    console.error(`Error in resume URL check for application ${req.params.applicationId}:`, error);
+    console.error(
+      `Error in resume URL check for application ${req.params.applicationId}:`,
+      error
+    );
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -351,7 +397,9 @@ router.delete("/applications/:id", protect, admin, async (req, res) => {
 // Get user's applications
 router.get("/my-applications", protect, async (req, res) => {
   try {
-    const applications = await Application.find({ userId: req.user._id }).populate({
+    const applications = await Application.find({
+      userId: req.user._id,
+    }).populate({
       path: "jobId",
       select: "profiles companyName ctcOrStipend location offerType",
     });
@@ -394,8 +442,7 @@ router.get("/export/:jobId", protect, admin, async (req, res) => {
       return res.status(400).json({ message: "No applications to export" });
     }
 
-
-    const tableData = applications.map(app => ({
+    const tableData = applications.map((app) => ({
       Name: app.userId?.fullName || app.fullName || "N/A",
       Email: app.email || app.userId?.email || "N/A",
       Mobile: app.phone || app.userId?.phone || "N/A",
@@ -415,7 +462,9 @@ router.get("/export/:jobId", protect, admin, async (req, res) => {
     });
 
     const companyName = applications[0]?.jobId?.companyName || "Unknown";
-    XLSX.utils.sheet_add_aoa(worksheet, [[`Company: ${companyName}`], [""]], { origin: "A1" });
+    XLSX.utils.sheet_add_aoa(worksheet, [[`Company: ${companyName}`], [""]], {
+      origin: "A1",
+    });
     worksheet["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }];
     worksheet["A1"].s = {
       font: { bold: true, sz: 14 },
@@ -434,8 +483,11 @@ router.get("/export/:jobId", protect, admin, async (req, res) => {
 
     const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" });
     res.set({
-      "Content-Disposition": `attachment; filename="${companyName}_${applications[0]?.jobId?.profiles || "Job"}_Applications.xlsx"`,
-      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "Content-Disposition": `attachment; filename="${companyName}_${
+        applications[0]?.jobId?.profiles || "Job"
+      }_Applications.xlsx"`,
+      "Content-Type":
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     });
     res.send(buffer);
   } catch (error) {

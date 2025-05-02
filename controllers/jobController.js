@@ -77,7 +77,6 @@ exports.createJob = async (req, res) => {
         }
       } catch (emailError) {
         console.error("Error sending email notifications to students:", emailError);
-        // Do not fail the job creation if email sending fails
       }
     }
 
