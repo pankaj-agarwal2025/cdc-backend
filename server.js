@@ -1,4 +1,3 @@
-// server.js
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
@@ -10,6 +9,7 @@ const userRoutes = require("./routes/userRoutes");
 const applicationRoutes = require("./routes/applicationRoutes");
 const trainingRoutes = require("./routes/TrainingRoutes");
 const emailRoutes = require("./routes/emailRoutes");
+const interviewExperienceRoutes = require("./routes/interviewExperienceRoutes");
 const cloudinary = require("cloudinary").v2;
 
 const app = express();
@@ -43,6 +43,7 @@ app.use("/api/profile", profileRoutes);
 app.use("/api/applications", applicationRoutes);
 app.use("/api/trainings", trainingRoutes);
 app.use("/api/email", emailRoutes);
+app.use("/api/interview-experiences", interviewExperienceRoutes);
 
 // Global error handler
 app.use((err, req, res, next) => {
