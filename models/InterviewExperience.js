@@ -7,7 +7,7 @@ const interviewExperienceSchema = new mongoose.Schema({
   batch: { type: String, required: true },
   course: { type: String, required: true },
   interviewLocation: { type: String, required: true },
-  offerStatus: { type: String, enum: ["No Offer", "Accepted", "Declined"], required: true },
+  offerStatus: { type: String, enum: ["No Selected", "Accepted", "Declined"], required: true },
   experienceRating: { type: String, enum: ["Amazing", "Neutral", "Bad"], required: true },
   difficulty: { type: String, enum: ["Easy", "Medium", "Hard"], required: true },
   postedDate: { type: Date, default: Date.now },
