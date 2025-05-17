@@ -19,7 +19,6 @@ app.use(
     origin: [
       process.env.FRONTEND_URL || "https://campusconnectkrmu.onrender.com",
       "https://cdc.soet-krmu.com",
-      "https://cdc-portal-zv4g.onrender.com",
       "http://localhost:5173",
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
@@ -45,7 +44,6 @@ app.use("/api/trainings", trainingRoutes);
 app.use("/api/email", emailRoutes);
 app.use("/api/interview-experiences", interviewExperienceRoutes);
 
-// Global error handler
 app.use((err, req, res, next) => {
   console.error("Unhandled error:", {
     message: err.message,

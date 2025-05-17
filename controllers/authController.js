@@ -102,7 +102,7 @@ exports.registerUser = async (req, res) => {
     await sendVerificationEmail(user, verificationToken);
 
     res.status(201).json({
-      message: "Signup successful! Please check your email to verify your account within 15 minutes.",
+      message: "Signup successful! Please check your email to verify your account within 15 minutes. Also check the spam folder",
     });
   } catch (error) {
     console.error("Error in register:", error);
